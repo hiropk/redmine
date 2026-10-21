@@ -970,6 +970,23 @@ class Redmine::ApiTest::IssuesTest < Redmine::ApiTest::Base
     assert_equal ['MySQL', 'PostgreSQL'], issue.custom_field_value(1).sort
   end
 
+  test "PUT /issues/:id.json with encrypted custom field" do
+    Redmine::Configuration.with 'database_cipher_key' => 'secret' do
+      field = IssueCustomField.create!(:name => 'Secret', :field_format => 'encrypted_string',
+                                       :is_for_all => true, :tracker_ids => [1])
+      put(
+        '/issues/3.json',
+        :params => {:issue => {:custom_fields => [{'id' => field.id.to_s, 'value' => 'my secret'}]}},
+        :headers => credentials('jsmith'))
+      assert_response :no_content
+      assert_match /\Aaes-256-cbc:/, Issue.find(3).custom_value_for(field).read_attribute(:value)
+
+      get '/issues/3.json', :headers => credentials('jsmith')
+      json = ActiveSupport::JSON.decode(response.body)
+      assert_equal 'my secret', json['issue']['custom_fields'].detect {|f| f['id'] == field.id}['value']
+    end
+  end
+
   test "PUT /issues/:id.xml with project change" do
     put(
       '/issues/3.xml',

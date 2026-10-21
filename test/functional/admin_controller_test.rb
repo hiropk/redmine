@@ -213,6 +213,23 @@ class AdminControllerTest < Redmine::ControllerTest
     assert_response :success
   end
 
+  def test_info_should_check_cipher_key_if_encrypted_custom_fields_exist
+    get :info
+    assert_select 'td.name', :text => I18n.t(:text_database_cipher_key_configured), :count => 0
+
+    Redmine::Configuration.with 'database_cipher_key' => 'secret' do
+      IssueCustomField.create!(:name => 'Secret', :field_format => 'encrypted_string')
+    end
+    Redmine::Configuration.with 'database_cipher_key' => nil do
+      get :info
+    end
+    assert_select 'tr' do |rows|
+      row = rows.detect {|tr| tr.at('td.name')&.text == I18n.t(:text_database_cipher_key_configured)}
+      assert_not_nil row
+      assert_not_nil row.at('td.tick .icon-error')
+    end
+  end
+
   def test_admin_menu_plugin_extension
     Redmine::MenuManager.map :admin_menu do |menu|
       menu.push :test_admin_menu_plugin_extension, '/foo/bar', :caption => 'Test'

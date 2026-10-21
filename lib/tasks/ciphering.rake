@@ -17,20 +17,29 @@
 
 
 namespace :db do
-  desc 'Encrypts SCM and LDAP passwords in the database.'
+  encrypted_custom_values = lambda do
+    CustomValue.where(:custom_field_id => CustomField.where(:field_format => 'encrypted_string').select(:id))
+  end
+
+  desc 'Encrypts SCM and LDAP passwords and encrypted custom field values in the database.'
   task :encrypt => :environment do
     unless (Repository.encrypt_all(:password) &&
       AuthSource.encrypt_all(:account_password) &&
-      User.encrypt_all(:twofa_totp_key))
+      User.encrypt_all(:twofa_totp_key) &&
+      encrypted_custom_values.call.encrypt_all(:value))
       raise "Some objects could not be saved after encryption, update was rolled back."
     end
   end
 
-  desc 'Decrypts SCM and LDAP passwords in the database.'
+  desc 'Decrypts SCM and LDAP passwords and encrypted custom field values in the database.'
   task :decrypt => :environment do
+    if encrypted_custom_values.call.any?(&:value_undecryptable?)
+      raise "Some encrypted custom field values could not be decrypted, check the database_cipher_key."
+    end
     unless (Repository.decrypt_all(:password) &&
       AuthSource.decrypt_all(:account_password) &&
-      User.decrypt_all(:twofa_totp_key))
+      User.decrypt_all(:twofa_totp_key) &&
+      encrypted_custom_values.call.decrypt_all(:value))
       raise "Some objects could not be saved after decryption, update was rolled back."
     end
   end

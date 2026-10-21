@@ -6749,6 +6749,58 @@ class IssuesControllerTest < Redmine::ControllerTest
     assert_mail_body_match "Searchable field changed from 125 to New custom value", mail
   end
 
+  def test_get_edit_should_not_render_encrypted_custom_field_value
+    Redmine::Configuration.with 'database_cipher_key' => 'secret' do
+      field = IssueCustomField.create!(:name => 'Secret', :field_format => 'encrypted_string',
+                                       :is_for_all => true, :tracker_ids => [1])
+      issue = Issue.find(1)
+      issue.custom_field_values = {field.id.to_s => 'my secret'}
+      issue.save!
+
+      @request.session[:user_id] = 2
+      get(:edit, :params => {:id => 1})
+      assert_response :success
+      assert_select "input[type=password][id=issue_custom_field_values_#{field.id}][name=ignore]"
+      assert_not_include 'my secret', response.body
+    end
+  end
+
+  def test_put_update_with_encrypted_custom_field_change
+    Redmine::Configuration.with 'database_cipher_key' => 'secret' do
+      field = IssueCustomField.create!(:name => 'Secret', :field_format => 'encrypted_string',
+                                       :is_for_all => true, :tracker_ids => [1])
+      @request.session[:user_id] = 2
+      with_settings :notified_events => %w(issue_updated) do
+        put(
+          :update,
+          :params => {:id => 1, :issue => {:custom_field_values => {field.id.to_s => 'my secret'}}}
+        )
+      end
+      assert_redirected_to :action => 'show', :id => '1'
+      assert_equal 'my secret', Issue.find(1).custom_field_value(field)
+
+      detail = Journal.last.details.detect {|d| d.prop_key == field.id.to_s}
+      assert_nil detail.value
+      mail = ActionMailer::Base.deliveries.last
+      assert_mail_body_match 'Secret updated', mail
+    end
+  end
+
+  def test_put_update_should_keep_encrypted_custom_field_value_if_not_edited
+    Redmine::Configuration.with 'database_cipher_key' => 'secret' do
+      field = IssueCustomField.create!(:name => 'Secret', :field_format => 'encrypted_string',
+                                       :is_for_all => true, :tracker_ids => [1])
+      issue = Issue.find(1)
+      issue.custom_field_values = {field.id.to_s => 'my secret'}
+      issue.save!
+
+      @request.session[:user_id] = 2
+      put(:update, :params => {:id => 1, :ignore => 'xxxxxxxxxxxxxxx', :issue => {:subject => 'Updated'}})
+      assert_redirected_to :action => 'show', :id => '1'
+      assert_equal 'my secret', Issue.find(1).custom_field_value(field)
+    end
+  end
+
   def test_put_update_with_multi_custom_field_change
     field = CustomField.find(1)
     field.update_attribute :multiple, true

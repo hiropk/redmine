@@ -36,6 +36,9 @@ class IssueCustomField < CustomField
   end
 
   def visible_by?(project, user=User.current)
+    # Encrypted values can not be read or written without the cipher key
+    return false if field_format == 'encrypted_string' && !format.cipher_key_configured?
+
     super || roles.intersect?(user.roles_for_project(project))
   end
 

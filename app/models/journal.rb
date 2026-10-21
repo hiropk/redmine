@@ -282,11 +282,13 @@ class Journal < ApplicationRecord
     # custom fields changes
     if @custom_values_before_change
       values_by_custom_field_id = {}
+      encrypted_custom_field_ids = []
       @custom_values_before_change.each_key do |custom_field_id|
         values_by_custom_field_id[custom_field_id] = nil
       end
       journalized.custom_field_values.each do |c|
         values_by_custom_field_id[c.custom_field_id] = c.value
+        encrypted_custom_field_ids << c.custom_field_id if c.custom_field.field_format == 'encrypted_string'
       end
 
       values_by_custom_field_id.each do |custom_field_id, after|
@@ -305,6 +307,9 @@ class Journal < ApplicationRecord
           (after - before).reject(&:blank?).each do |value|
             add_custom_field_detail(custom_field_id, nil, value)
           end
+        elsif encrypted_custom_field_ids.include?(custom_field_id)
+          # Encrypted values must not be stored in clear text
+          add_custom_field_detail(custom_field_id, nil, nil)
         else
           add_custom_field_detail(custom_field_id, before, after)
         end

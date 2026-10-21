@@ -89,5 +89,8 @@ class AdminController < ApplicationController
       [:text_mermaid_available, Redmine::Mermaid.available?]
     ]
     @checklist << [:text_default_active_job_queue_changed, Rails.application.config.active_job.queue_adapter != :async] if Rails.env.production?
+    if CustomField.exists?(:field_format => 'encrypted_string')
+      @checklist << [:text_database_cipher_key_configured, Redmine::Ciphering.cipher_key.present?]
+    end
   end
 end

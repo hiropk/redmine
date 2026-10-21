@@ -1509,3 +1509,6 @@ en:
   reaction_text_x_other_users:
     one: "1 other"
     other: "%{count} others"
+  label_encrypted_string: Encrypted text
+  error_database_cipher_key_not_configured: "The database cipher key is not configured in config/configuration.yml"
+  text_database_cipher_key_configured: Database cipher key configured for encrypted custom fields

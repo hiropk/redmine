@@ -136,6 +136,24 @@ class Redmine::EncryptedStringFieldFormatTest < ActionView::TestCase
     end
   end
 
+  def test_value_assigned_before_custom_field_should_be_encrypted
+    with_cipher_key do
+      custom_value = CustomValue.create!(:value => 'my secret', :customized => Issue.find(1), :custom_field => @field)
+
+      assert_match /\Aaes-256-cbc:/, custom_value.reload.read_attribute(:value)
+      assert_equal 'my secret', custom_value.value
+    end
+  end
+
+  def test_value_assigned_before_custom_field_should_not_be_saved_without_cipher_key
+    with_cipher_key(nil) do
+      custom_value = CustomValue.new(:value => 'my secret', :customized => Issue.find(1), :custom_field => @field)
+
+      assert_not custom_value.save
+      assert_not CustomValue.where(:custom_field => @field).exists?
+    end
+  end
+
   def test_value_of_other_formats_should_not_be_decrypted
     field = IssueCustomField.create!(:name => 'Text', :field_format => 'string')
     custom_value = CustomValue.new(:custom_field => field, :value => 'aes-256-cbc:foo')

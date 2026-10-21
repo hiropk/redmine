@@ -23,6 +23,7 @@ class CustomValue < ApplicationRecord
   belongs_to :custom_field
   belongs_to :customized, :polymorphic => true
 
+  before_save :encrypt_clear_value
   after_save :custom_field_after_save_custom_value
 
   def initialize(attributes=nil, *args)
@@ -79,6 +80,8 @@ class CustomValue < ApplicationRecord
 
   def value=(arg)
     if !encrypted?
+      # The format is unknown if the value is assigned before the custom field
+      @value_assigned_without_custom_field = custom_field.nil?
       super
     # Keeps the stored value if unchanged, as it would be encrypted
     # with a new IV each time
@@ -99,6 +102,20 @@ class CustomValue < ApplicationRecord
 
   def ciphered?(text)
     text.to_s.start_with?('aes-256-cbc:')
+  end
+
+  # Encrypts a value that was assigned before the custom field (eg. by
+  # CustomValue.new(:value => 'x', :custom_field => field)), and refuses
+  # to store it in clear text if the cipher key is missing
+  def encrypt_clear_value
+    return unless @value_assigned_without_custom_field && encrypted?
+
+    @value_assigned_without_custom_field = false
+    return if self[:value].blank? || ciphered?(self[:value])
+
+    throw :abort if Redmine::Ciphering.cipher_key.blank?
+
+    write_ciphered_attribute(:value, self[:value])
   end
 
   def custom_field_after_save_custom_value

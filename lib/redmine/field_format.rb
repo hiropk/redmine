@@ -475,6 +475,63 @@ module Redmine
       end
     end
 
+    # Single line text whose values are stored encrypted in the database
+    # with the key set by database_cipher_key in config/configuration.yml.
+    # Values can not be used in SQL statements, so filtering, searching,
+    # sorting and grouping are not supported, and values are not stored
+    # in the journal details.
+    class EncryptedStringFormat < Unbounded
+      add 'encrypted_string'
+      self.customized_class_names = %w(Issue)
+      self.is_filter_supported = false
+      self.bulk_edit_supported = false
+      self.change_no_details = true
+      self.form_partial = 'custom_fields/formats/encrypted_string'
+
+      def cipher_key_configured?
+        Redmine::Ciphering.cipher_key.present?
+      end
+
+      def validate_custom_field(custom_field)
+        errors = super
+        if custom_field.new_record? && !cipher_key_configured?
+          errors << [:field_format, l(:error_database_cipher_key_not_configured)]
+        end
+        errors
+      end
+
+      def validate_custom_value(custom_value)
+        errors = super
+        if custom_value.value.present? && !cipher_key_configured?
+          errors << l(:error_database_cipher_key_not_configured)
+        end
+        errors
+      end
+
+      def order_statement(custom_field)
+        nil
+      end
+
+      # Renders a password field that is submitted only if the user edits it,
+      # so that the stored value is not sent to the browser (same as the
+      # repository and LDAP passwords)
+      def edit_tag(view, tag_id, tag_name, custom_value, options={})
+        if custom_value.value.present? && custom_value.value == custom_value.value_was
+          view.password_field_tag(
+            'ignore', 'x' * 15,
+            options.merge(:id => tag_id, :autocomplete => 'new-password',
+                          :onfocus => "this.value=''; this.name='#{tag_name}';",
+                          :onchange => "this.name='#{tag_name}';")
+          )
+        else
+          view.password_field_tag(
+            tag_name, custom_value.value,
+            options.merge(:id => tag_id, :autocomplete => 'new-password')
+          )
+        end
+      end
+    end
+
     class Numeric < Unbounded
       self.form_partial = 'custom_fields/formats/numeric'
       self.totalable_supported = true

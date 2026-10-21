@@ -18,9 +18,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 class CustomValue < ApplicationRecord
+  include Redmine::Ciphering
+
   belongs_to :custom_field
   belongs_to :customized, :polymorphic => true
 
+  before_save :encrypt_clear_value
   after_save :custom_field_after_save_custom_value
 
   def initialize(attributes=nil, *args)
@@ -61,7 +64,59 @@ class CustomValue < ApplicationRecord
     value.to_s
   end
 
+  # Returns the decrypted value for encrypted custom fields, or nil if
+  # it can not be decrypted (eg. the cipher key is missing or wrong)
+  def value
+    text = super
+    # Checks the format only for ciphered texts to avoid loading the custom field
+    return text unless ciphered?(text) && encrypted?
+    return nil if Redmine::Ciphering.cipher_key.blank?
+
+    clear = read_ciphered_attribute(:value).force_encoding('UTF-8')
+    clear.valid_encoding? ? clear : nil
+  rescue OpenSSL::Cipher::CipherError, ArgumentError
+    nil
+  end
+
+  def value=(arg)
+    if !encrypted?
+      # The format is unknown if the value is assigned before the custom field
+      @value_assigned_without_custom_field = custom_field.nil?
+      super
+    # Keeps the stored value if unchanged, as it would be encrypted
+    # with a new IV each time
+    elsif !ciphered?(self[:value]) || arg.to_s != value.to_s
+      write_ciphered_attribute(:value, arg)
+    end
+  end
+
+  def value_undecryptable?
+    encrypted? && ciphered?(self[:value]) && value.nil?
+  end
+
   private
+
+  def encrypted?
+    custom_field&.field_format == 'encrypted_string'
+  end
+
+  def ciphered?(text)
+    text.to_s.start_with?('aes-256-cbc:')
+  end
+
+  # Encrypts a value that was assigned before the custom field (eg. by
+  # CustomValue.new(:value => 'x', :custom_field => field)), and refuses
+  # to store it in clear text if the cipher key is missing
+  def encrypt_clear_value
+    return unless @value_assigned_without_custom_field && encrypted?
+
+    @value_assigned_without_custom_field = false
+    return if self[:value].blank? || ciphered?(self[:value])
+
+    throw :abort if Redmine::Ciphering.cipher_key.blank?
+
+    write_ciphered_attribute(:value, self[:value])
+  end
 
   def custom_field_after_save_custom_value
     custom_field.after_save_custom_value(self)

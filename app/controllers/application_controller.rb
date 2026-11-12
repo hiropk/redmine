@@ -249,22 +249,14 @@ class ApplicationController < ActionController::Base
     end
   end
 
-  def init_twofa_pairing_and_send_code_for(twofa)
-    twofa.init_pairing!
-    if twofa.send_code(controller: 'twofa', action: 'activate')
-      flash[:notice] = l('twofa_code_sent')
-    end
-    redirect_to controller: 'twofa', action: 'activate_confirm', scheme: twofa.scheme_name
-  end
-
   def check_twofa_activation
     if session[:must_activate_twofa]
       if User.current.must_activate_twofa?
         flash[:warning] = l('twofa_warning_require')
         if Redmine::Twofa.available_schemes.length == 1
-          twofa_scheme = Redmine::Twofa.for_twofa_scheme(Redmine::Twofa.available_schemes.first)
-          twofa = twofa_scheme.new(User.current)
-          init_twofa_pairing_and_send_code_for(twofa)
+          # The pairing is initialized by TwofaController#activate_confirm
+          redirect_to controller: 'twofa', action: 'activate_confirm',
+                      scheme: Redmine::Twofa.available_schemes.first
         else
           redirect_to controller: 'twofa', action: 'select_scheme'
         end

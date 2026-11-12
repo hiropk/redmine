@@ -29,6 +29,10 @@ module Redmine
         super
       end
 
+      def pairing_initialized?
+        @user.twofa_totp_key.present?
+      end
+
       def destroy_pairing_without_verify!
         @user.update!(twofa_totp_key: nil, twofa_totp_last_used_at: nil)
         # reset the cached totp as the key might have changed

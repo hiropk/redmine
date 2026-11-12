@@ -254,9 +254,7 @@ class ApplicationController < ActionController::Base
       if User.current.must_activate_twofa?
         flash[:warning] = l('twofa_warning_require')
         if Redmine::Twofa.available_schemes.length == 1
-          # Only redirect here. The pairing is initialized by TwofaController,
-          # so that requests for other resources (e.g. images loaded by the
-          # confirmation page) do not regenerate the secret shown to the user.
+          # The pairing is initialized by TwofaController#activate_confirm
           redirect_to controller: 'twofa', action: 'activate_confirm',
                       scheme: Redmine::Twofa.available_schemes.first
         else

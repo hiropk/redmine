@@ -42,6 +42,12 @@ module Redmine
         @user
       end
 
+      # Returns true if the pairing initialized by init_pairing! can be
+      # confirmed without initializing it again
+      def pairing_initialized?
+        false
+      end
+
       def confirm_pairing!(code)
         # make sure an otp and not a backup code is used
         if verify_otp!(code)

@@ -50,7 +50,7 @@ class TwofaController < ApplicationController
     # Initialize the pairing only once per session, so that reloading this page
     # or being redirected here again does not invalidate the secret already
     # shown to the user
-    init_pairing_and_send_code(flash.now) unless twofa_pairing_initialized?
+    init_pairing_and_send_code(now: true) unless twofa_pairing_initialized?
     @twofa_view = @twofa.init_pairing_view_variables
     no_store
   end
@@ -126,16 +126,16 @@ class TwofaController < ApplicationController
     end
   end
 
-  def init_pairing_and_send_code(flash_hash = flash)
+  def init_pairing_and_send_code(now: false)
     @twofa.init_pairing!
     session[:twofa_pairing_scheme] = @twofa.scheme_name
     if @twofa.send_code(controller: 'twofa', action: 'activate')
-      flash_hash[:notice] = l('twofa_code_sent')
+      (now ? flash.now : flash)[:notice] = l('twofa_code_sent')
     end
   end
 
   def twofa_pairing_initialized?
-    session[:twofa_pairing_scheme] == @twofa.scheme_name
+    session[:twofa_pairing_scheme] == @twofa.scheme_name && @twofa.pairing_initialized?
   end
 
   def ensure_user_has_no_twofa

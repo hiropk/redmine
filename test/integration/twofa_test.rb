@@ -274,6 +274,23 @@ class TwofaTest < Redmine::IntegrationTest
     end
   end
 
+  test "should regenerate totp key if it was removed after twofa setup was initialized" do
+    with_settings twofa: "2" do
+      log_user('jsmith', 'jsmith')
+      follow_redirect!
+      assert_redirected_to "/my/twofa/totp/activate/confirm"
+      follow_redirect!
+      assert User.find_by_login('jsmith').twofa_totp_key.present?
+
+      # e.g. 2FA was activated and deactivated in another session
+      User.find_by_login('jsmith').update_column :twofa_totp_key, nil
+
+      get "/my/twofa/totp/activate/confirm"
+      assert_response :success
+      assert User.find_by_login('jsmith').twofa_totp_key.present?
+    end
+  end
+
   test "should regenerate totp key when twofa setup is initialized explicitly" do
     with_settings twofa: "2" do
       log_user('jsmith', 'jsmith')

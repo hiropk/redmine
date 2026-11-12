@@ -42,16 +42,22 @@ class TwofaController < ApplicationController
   before_action :activate_setup, only: [:activate_init, :activate_confirm, :activate]
 
   def activate_init
-    init_twofa_pairing_and_send_code_for(@twofa)
+    init_pairing_and_send_code
+    redirect_to action: :activate_confirm, scheme: @twofa.scheme_name
   end
 
   def activate_confirm
+    # Initialize the pairing only once per session, so that reloading this page
+    # or being redirected here again does not invalidate the secret already
+    # shown to the user
+    init_pairing_and_send_code(flash.now) unless twofa_pairing_initialized?
     @twofa_view = @twofa.init_pairing_view_variables
     no_store
   end
 
   def activate
     if @twofa.confirm_pairing!(params[:twofa_code].to_s)
+      session.delete(:twofa_pairing_scheme)
       # The session token was destroyed by the twofa pairing, generate a new one
       renew_session_token
       flash[:notice] = l('twofa_activated', bc_path: my_twofa_backup_codes_init_path)
@@ -118,6 +124,18 @@ class TwofaController < ApplicationController
     if params[:scheme].to_s != @twofa.scheme_name
       redirect_to my_account_path
     end
+  end
+
+  def init_pairing_and_send_code(flash_hash = flash)
+    @twofa.init_pairing!
+    session[:twofa_pairing_scheme] = @twofa.scheme_name
+    if @twofa.send_code(controller: 'twofa', action: 'activate')
+      flash_hash[:notice] = l('twofa_code_sent')
+    end
+  end
+
+  def twofa_pairing_initialized?
+    session[:twofa_pairing_scheme] == @twofa.scheme_name
   end
 
   def ensure_user_has_no_twofa

@@ -250,6 +250,46 @@ class TwofaTest < Redmine::IntegrationTest
     end
   end
 
+  test "should not regenerate totp key on redirect to required twofa setup" do
+    with_settings twofa: "2" do
+      log_user('jsmith', 'jsmith')
+      follow_redirect!
+      assert_redirected_to "/my/twofa/totp/activate/confirm"
+      follow_redirect!
+      assert_response :success
+      assert key = User.find_by_login('jsmith').twofa_totp_key
+      assert_select 'code', text: key.scan(/.{4}/).join(' ')
+
+      # Requests for other resources (e.g. an image loaded by the confirmation
+      # page) are redirected to the confirmation page again
+      get "/projects"
+      assert_redirected_to "/my/twofa/totp/activate/confirm"
+      follow_redirect!
+      assert_response :success
+      assert_equal key, User.find_by_login('jsmith').twofa_totp_key
+
+      post "/my/twofa/totp/activate", params: {twofa_code: ROTP::TOTP.new(key).now}
+      assert_redirected_to "/my/account"
+      assert_equal 'totp', User.find_by_login('jsmith').twofa_scheme
+    end
+  end
+
+  test "should regenerate totp key when twofa setup is initialized explicitly" do
+    with_settings twofa: "2" do
+      log_user('jsmith', 'jsmith')
+      follow_redirect!
+      assert_redirected_to "/my/twofa/totp/activate/confirm"
+      follow_redirect!
+      assert key = User.find_by_login('jsmith').twofa_totp_key
+
+      post "/my/twofa/totp/activate/init"
+      assert_redirected_to "/my/twofa/totp/activate/confirm"
+      follow_redirect!
+      assert_response :success
+      assert_not_equal key, User.find_by_login('jsmith').twofa_totp_key
+    end
+  end
+
   test "should deny showing twofa information again" do
     log_user('jsmith', 'jsmith')
     get "/my/account"
